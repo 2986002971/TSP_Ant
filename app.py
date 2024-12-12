@@ -49,7 +49,7 @@ if __name__ == "__main__":
         "q": st.sidebar.slider("信息素强度系数 (Q)", 0.1, 10.0, 1.0),
         "max_iterations": st.sidebar.slider("最大迭代次数", 10, 1000, 100),
         "min_pheromone": st.sidebar.slider("最小信息素浓度", 0.01, 1.0, 0.1),
-        "max_pheromone": st.sidebar.slider("最大信息素浓度", 1.0, 20.0, 10.0),
+        "max_pheromone": st.sidebar.slider("最大信息素浓度", 1.0, 100.0, 50.0),
     }
 
     if st.sidebar.button("开始优化"):

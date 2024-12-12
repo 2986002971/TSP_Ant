@@ -16,3 +16,7 @@ numpy = "*"
 numba = "*"
 streamlit = "1.40.*"
 matplotlib = "*"
+
+pandas = "*"
+tqdm = "*"
+
