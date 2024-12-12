@@ -42,12 +42,12 @@ if __name__ == "__main__":
     st.sidebar.header("参数设置")
 
     params = {
-        "n_ants": st.sidebar.slider("蚂蚁数量", 10, 100, 34),
+        "n_ants": st.sidebar.slider("蚂蚁数量", 10, 1000, 34),
         "alpha": st.sidebar.slider("信息素重要程度 (Alpha)", 0.1, 5.0, 1.0),
         "beta": st.sidebar.slider("启发式信息重要程度 (Beta)", 0.1, 5.0, 2.0),
         "rho": st.sidebar.slider("信息素挥发系数 (Rho)", 0.01, 0.5, 0.1),
         "q": st.sidebar.slider("信息素强度系数 (Q)", 0.1, 10.0, 1.0),
-        "max_iterations": st.sidebar.slider("最大迭代次数", 10, 500, 100),
+        "max_iterations": st.sidebar.slider("最大迭代次数", 10, 1000, 100),
         "min_pheromone": st.sidebar.slider("最小信息素浓度", 0.01, 1.0, 0.1),
         "max_pheromone": st.sidebar.slider("最大信息素浓度", 1.0, 20.0, 10.0),
     }

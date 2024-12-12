@@ -1,15 +1,15 @@
 import numpy as np
-from numba import float64, int64, jit
+from numba import float32, int32, jit, prange, void
 
 
 @jit(
-    float64[:](int64, int64[:], float64[:, :], float64[:, :], float64, float64),
+    float32[:](int32, int32[:], float32[:, :], float32[:, :], float32, float32),
     nopython=True,
 )
 def calculate_probabilities(current, unvisited, pheromone, heuristic, alpha, beta):
     """计算转移概率"""
     n = len(unvisited)
-    probs = np.zeros(n, dtype=np.float64)
+    probs = np.zeros(n, dtype=np.float32)
 
     for i in range(n):
         if unvisited[i]:
@@ -25,7 +25,7 @@ def calculate_probabilities(current, unvisited, pheromone, heuristic, alpha, bet
     return probs
 
 
-@jit(int64(float64[:]), nopython=True)
+@jit(int32(float32[:]), nopython=True)
 def choose_next_city(probabilities):
     """根据概率选择下一个城市"""
     r = np.random.random()
@@ -37,11 +37,11 @@ def choose_next_city(probabilities):
     return len(probabilities) - 1
 
 
-@jit(int64[:](float64[:, :], float64[:, :], float64, float64, int64), nopython=True)
+@jit(int32[:](float32[:, :], float32[:, :], float32, float32, int32), nopython=True)
 def construct_solution(pheromone, heuristic, alpha, beta, n_cities):
     """单只蚂蚁构建解"""
-    path = np.zeros(n_cities, dtype=np.int64)
-    unvisited = np.ones(n_cities, dtype=np.int64)
+    path = np.zeros(n_cities, dtype=np.int32)
+    unvisited = np.ones(n_cities, dtype=np.int32)
 
     # 随机选择起始城市
     current = np.random.randint(0, n_cities)
@@ -62,7 +62,7 @@ def construct_solution(pheromone, heuristic, alpha, beta, n_cities):
     return path
 
 
-@jit(float64(int64[:], float64[:, :]), nopython=True)
+@jit(float32(int32[:], float32[:, :]), nopython=True)
 def calculate_path_distance(path, distance_matrix):
     """计算路径总距离"""
     total_distance = 0.0
@@ -73,7 +73,18 @@ def calculate_path_distance(path, distance_matrix):
     return total_distance
 
 
-@jit(nopython=True)
+@jit(
+    void(
+        float32[:, :],  # pheromone
+        int32[:, :],  # paths
+        float32[:],  # distances
+        float32,  # rho
+        float32,  # q
+        float32,  # min_pheromone
+        float32,  # max_pheromone
+    ),
+    nopython=True,
+)
 def update_pheromone(pheromone, paths, distances, rho, q, min_pheromone, max_pheromone):
     """更新信息素"""
     n = len(pheromone)
@@ -92,13 +103,33 @@ def update_pheromone(pheromone, paths, distances, rho, q, min_pheromone, max_phe
         pheromone[path[-1], path[0]] += delta
         pheromone[path[0], path[-1]] += delta
 
-    # 限制信息素范围（由于numba不支持广播，使用显式循环）
+    # 限制信息素范围
     for i in range(n):
         for j in range(n):
             if pheromone[i, j] < min_pheromone:
                 pheromone[i, j] = min_pheromone
             elif pheromone[i, j] > max_pheromone:
                 pheromone[i, j] = max_pheromone
+
+
+@jit(
+    int32[:, :](
+        int32,  # n_ants
+        float32[:, :],  # pheromone
+        float32[:, :],  # heuristic
+        float32,  # alpha
+        float32,  # beta
+        int32,  # n_cities
+    ),
+    nopython=True,
+    parallel=True,
+)
+def construct_solutions_parallel(n_ants, pheromone, heuristic, alpha, beta, n_cities):
+    """并行构建多只蚂蚁的解"""
+    paths = np.zeros((n_ants, n_cities), dtype=np.int32)
+    for ant in prange(n_ants):
+        paths[ant] = construct_solution(pheromone, heuristic, alpha, beta, n_cities)
+    return paths
 
 
 # 主类
@@ -115,7 +146,7 @@ class AntColonyTSP:
         min_pheromone=0.1,
         max_pheromone=10.0,
     ):
-        self.distance_matrix = np.array(distance_matrix, dtype=np.float64)
+        self.distance_matrix = np.array(distance_matrix, dtype=np.float32)
         self.n_cities = len(distance_matrix)
         self.n_ants = n_ants if n_ants else self.n_cities
         self.alpha = alpha
@@ -128,7 +159,7 @@ class AntColonyTSP:
 
         # 初始化信息素矩阵
         self.pheromone = (
-            np.ones((self.n_cities, self.n_cities), dtype=np.float64)
+            np.ones((self.n_cities, self.n_cities), dtype=np.float32)
             * self.max_pheromone
         )
         # 计算启发式信息
@@ -142,34 +173,31 @@ class AntColonyTSP:
     def solve(self):
         """运行蚁群算法"""
         for iteration in range(self.max_iterations):
-            # 构建所有蚂蚁的解
-            paths = np.array(
-                [
-                    construct_solution(
-                        self.pheromone,
-                        self.heuristic,
-                        self.alpha,
-                        self.beta,
-                        self.n_cities,
-                    )
-                    for _ in range(self.n_ants)
-                ]
+            # 并行构建所有蚂蚁的解
+            paths = construct_solutions_parallel(
+                self.n_ants,
+                self.pheromone,
+                self.heuristic,
+                self.alpha,
+                self.beta,
+                self.n_cities,
             )
 
-            # 计算路径长度
+            # 计算路径长度 - 确保使用float32
             distances = np.array(
-                [calculate_path_distance(path, self.distance_matrix) for path in paths]
+                [calculate_path_distance(path, self.distance_matrix) for path in paths],
+                dtype=np.float32,  # 明确指定类型为float32
             )
 
-            # 更新信息素
+            # 更新信息素 - 确保所有参数都是float32
             update_pheromone(
                 self.pheromone,
                 paths,
                 distances,
-                self.rho,
-                self.q,
-                self.min_pheromone,
-                self.max_pheromone,
+                np.float32(self.rho),
+                np.float32(self.q),
+                np.float32(self.min_pheromone),
+                np.float32(self.max_pheromone),
             )
 
             # 更新最优解
